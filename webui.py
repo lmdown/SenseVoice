@@ -14,12 +14,17 @@ import torchaudio
 
 from funasr import AutoModel
 
+# Auto detect device: CUDA (NVIDIA) -> MPS (Apple Silicon) -> CPU
+device = "cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+print(f"Using device: {device}")
+
 model = "iic/SenseVoiceSmall"
 model = AutoModel(model=model,
-				  vad_model="iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
-				  vad_kwargs={"max_single_segment_time": 30000},
-				  trust_remote_code=True,
-				  )
+		  vad_model="iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+		  vad_kwargs={"max_single_segment_time": 30000},
+		  trust_remote_code=True,
+		  device=device
+		  )
 
 import re
 
@@ -160,23 +165,36 @@ def model_inference(input_wav, language, fs=16000):
 			resampler = torchaudio.transforms.Resample(fs, 16000)
 			input_wav_t = torch.from_numpy(input_wav).to(torch.float32)
 			input_wav = resampler(input_wav_t[None, :])[0, :].numpy()
-	
-	
+
+	# Create a list to store logs
+	logs = []
+
 	merge_vad = True #False if selected_task == "ASR" else True
-	print(f"language: {language}, merge_vad: {merge_vad}")
+	log_msg = f"language: {language}, merge_vad: {merge_vad}"
+	print(log_msg)
+	# logs.append(log_msg)
+	
 	text = model.generate(input=input_wav,
-						  cache={},
-						  language=language,
-						  use_itn=True,
-						  batch_size_s=60, merge_vad=merge_vad)
+					  cache={},
+					  language=language,
+					  use_itn=True,
+					  batch_size_s=60, merge_vad=merge_vad)
 	
-	print(text)
+	log_msg = str(text)
+	print(log_msg)
+	logs.append(log_msg)
+	
 	text = text[0]["text"]
-	text = format_str_v3(text)
+	formatted_text = format_str_v3(text)
 	
-	print(text)
+	log_msg = formatted_text
+	print(log_msg)
+	# logs.append(log_msg)
 	
-	return text
+	# Join logs with newlines
+	log_output = "\n\n".join(logs)
+	
+	return formatted_text, log_output
 
 
 audio_examples = [
@@ -185,19 +203,19 @@ audio_examples = [
     ["example/en.mp3", "en"],
     ["example/ja.mp3", "ja"],
     ["example/ko.mp3", "ko"],
-    ["example/emo_1.wav", "auto"],
-    ["example/emo_2.wav", "auto"],
-    ["example/emo_3.wav", "auto"],
+    # ["example/emo_1.wav", "auto"],
+    # ["example/emo_2.wav", "auto"],
+    # ["example/emo_3.wav", "auto"],
     #["example/emo_4.wav", "auto"],
     #["example/event_1.wav", "auto"],
     #["example/event_2.wav", "auto"],
     #["example/event_3.wav", "auto"],
-    ["example/rich_1.wav", "auto"],
-    ["example/rich_2.wav", "auto"],
+    # ["example/rich_1.wav", "auto"],
+    # ["example/rich_2.wav", "auto"],
     #["example/rich_3.wav", "auto"],
-    ["example/longwav_1.wav", "auto"],
-    ["example/longwav_2.wav", "auto"],
-    ["example/longwav_3.wav", "auto"],
+    # ["example/longwav_1.wav", "auto"],
+    # ["example/longwav_2.wav", "auto"],
+    # ["example/longwav_3.wav", "auto"],
     #["example/longwav_4.wav", "auto"],
 ]
 
@@ -218,7 +236,7 @@ html_content = """
 
 
 def launch():
-	with gr.Blocks(theme=gr.themes.Soft()) as demo:
+	with gr.Blocks() as demo:
 		# gr.Markdown(description)
 		gr.HTML(html_content)
 		with gr.Row():
@@ -230,10 +248,54 @@ def launch():
 												  value="auto",
 												  label="Language")
 				fn_button = gr.Button("Start", variant="primary")
-				text_outputs = gr.Textbox(label="Results")
+				text_outputs = gr.Textbox(label="Results", lines=10, max_lines=20, scale=2)
+				with gr.Row():
+					copy_button = gr.Button("Copy Results", variant="secondary")
+					download_button = gr.Button("Download Results", variant="secondary")
+				
+				# Add copy functionality using JavaScript (lightweight without alert)
+				copy_button.click(
+					None,
+					inputs=[text_outputs],
+					outputs=None,
+					js="""
+					async (text) => {
+						if (text) {
+							await navigator.clipboard.writeText(text);
+						}
+					}
+					"""
+				)
+				
+				# Add download functionality using JavaScript (direct download)
+				download_button.click(
+					None,
+					inputs=[text_outputs],
+					outputs=None,
+					js="""
+					(text) => {
+						if (text) {
+							const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+							const url = URL.createObjectURL(blob);
+							const a = document.createElement('a');
+							a.href = url;
+							a.download = 'sensevoice_results.txt';
+							document.body.appendChild(a);
+							a.click();
+							document.body.removeChild(a);
+							URL.revokeObjectURL(url);
+						}
+					}
+					"""
+				)
+				
+				# Add log display component
+				log_outputs = gr.Textbox(label="Logs", lines=5, max_lines=20, interactive=False)
+			
 			gr.Examples(examples=audio_examples, inputs=[audio_inputs, language_inputs], examples_per_page=20)
 		
-		fn_button.click(model_inference, inputs=[audio_inputs, language_inputs], outputs=text_outputs)
+		# Update button click to handle multiple outputs
+		fn_button.click(model_inference, inputs=[audio_inputs, language_inputs], outputs=[text_outputs, log_outputs])
 
 	demo.launch()
 
