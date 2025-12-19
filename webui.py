@@ -297,6 +297,7 @@ def generate_html_content(lang):
 
 def launch():
 	# 检测系统语言环境
+	lang = None
 	try:
 		lang, _ = locale.getlocale()
 		# 检测中文语言环境，支持不同格式：zh_CN、Chinese (Simplified)_China等
@@ -305,6 +306,11 @@ def launch():
 		# 如果获取语言环境失败，默认使用英文
 		print(f"Failed to get locale: {e}")
 		current_lang = 'en'
+	
+
+	print(f"lang: {lang}")
+	print(f"current_lang: {current_lang}")
+
 	
 	with gr.Blocks() as demo:
 		# gr.Markdown(description)
