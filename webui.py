@@ -299,8 +299,8 @@ def launch():
 	# 检测系统语言环境
 	try:
 		lang, _ = locale.getlocale()
-		# 如果语言代码以'zh'开头，使用中文，否则使用英文
-		current_lang = 'zh' if lang and lang.startswith('zh') else 'en'
+		# 检测中文语言环境，支持不同格式：zh_CN、Chinese (Simplified)_China等
+		current_lang = 'zh' if lang and ('zh' in lang.lower() or 'chinese' in lang.lower()) else 'en'
 	except Exception as e:
 		# 如果获取语言环境失败，默认使用英文
 		print(f"Failed to get locale: {e}")
